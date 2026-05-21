@@ -1,0 +1,80 @@
+import pandas as pd
+
+def clean_wos_data():
+    # 1. 文件名配置
+    input_file = 'data_tatol_1000_raw.csv'
+    output_file = 'data_cleaned_1000.csv'
+
+    print(f"正在读取 {input_file} ...")
+
+    # 2. 读取数据
+    try:
+        # dtype=str 保证ID类数据不被转成科学计数法
+        df = pd.read_csv(input_file, encoding='utf-8-sig', dtype=str)
+    except FileNotFoundError:
+        print(f"错误：找不到文件 {input_file}，请检查文件名。")
+        return
+
+    # 3. 基础清洗：去除列名首尾空格
+    df.columns = df.columns.str.strip()
+
+    # 4. 定义我们需要的列 (严格基于你提供的列表)
+    # 注意：Pandas读取重复列名时，会自动在后面加 .1, .2。
+    # 这里我列出了最核心的字段。
+    wanted_columns = [
+        'Article Title',              # 论文标题
+        'Authors',                    # 作者
+        'Source Title',               # 期刊名称
+        'Publication Year',           # 出版年份
+        'Abstract',                   # 摘要
+        'Author Keywords',            # 作者关键词 (在你列表倒数第4项)
+        'Times Cited, All Databases', # 总引用次数
+        'DOI',                        # DOI号
+        'Document Type',              # 文献类型
+        'UT (Unique ID)'              # 入藏号 (WOS唯一ID)
+    ]
+
+    # 5. 检查并筛选列
+    missing_cols = []
+    final_columns = []
+
+    for col in wanted_columns:
+        if col in df.columns:
+            final_columns.append(col)
+        else:
+            # 处理可能存在的重复列名情况 (例如 .1) 或者真的缺失
+            # 这里做一个模糊匹配尝试，防止因为空格或重复导致的找不到
+            possible_matches = [c for c in df.columns if col in c]
+            if possible_matches:
+                final_columns.append(possible_matches[0]) # 拿第一个匹配的
+                print(f"提示: 找到相似列 '{possible_matches[0]}' 代替 '{col}'")
+            else:
+                missing_cols.append(col)
+
+    if missing_cols:
+        print(f"警告: 以下列未在文件中找到，将被忽略: {missing_cols}")
+
+    # 执行筛选
+    df_clean = df[final_columns].copy()
+
+    # 6. 数据内容清洗
+
+    # A. 删除全空行 (如果某行所有选定列都是空的)
+    df_clean.dropna(how='all', inplace=True)
+
+    # B. 处理引用次数 (转换为数字，用于排序)
+    if 'Times Cited, All Databases' in df_clean.columns:
+        # 将 NaN 填为 0，然后转为整数
+        df_clean['Times Cited, All Databases'] = df_clean['Times Cited, All Databases'].fillna('0').astype(int)
+
+    # C. (可选) 删除没有摘要的行 - 如果你做文本分析，这一步很有用
+    # if 'Abstract' in df_clean.columns:
+    #     df_clean = df_clean.dropna(subset=['Abstract'])
+
+    # 7. 保存结果
+    df_clean.to_csv(output_file, index=False, encoding='utf-8-sig')
+    print(f"清洗完成！共保留 {len(df_clean)} 行数据。")
+    print(f"文件已保存为: {output_file}")
+
+if __name__ == "__main__":
+    clean_wos_data()
